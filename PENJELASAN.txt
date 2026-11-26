@@ -1,0 +1,203 @@
+============================================================
+ CAFECYCLE - PENJELASAN (versi sederhana, fitur lengkap)
+============================================================
+
+CARA MENJALANKAN
+  1. Jalankan CafeCycle.sql di Query Tool pgAdmin (database "CafeCycle").
+     Perhatian: baris TRUNCATE menghapus data lama, lalu mengisi data dummy.
+  2. pip install psycopg2-binary
+  3. python main.py        (password database diatur di database.py)
+
+Akun contoh: admin/admin123, kasir1/kasir123, kasir2/kasir456
+Dibutuhkan Python 3.10 ke atas (karena memakai match - case).
+
+
+============================================================
+ YANG DIPAKAI DARI MATERI
+============================================================
+  variabel & tipe data, f-string, operator aritmatika/komparasi/logika
+  if - elif - else, if bersarang, ternary (a if kondisi else b)
+  match - case, while, for + range, break, continue
+  list, tuple, dictionary, enumerate, slicing, casting (list(...), int(...))
+  fungsi: def, parameter, parameter default, keyword argument, return
+          (termasuk return lebih dari satu nilai)
+  string: strip, split, join, isdigit, center, format rupiah dengan f-string
+
+
+============================================================
+ DI LUAR MATERI (jumlahnya sengaja dibuat sedikit)
+============================================================
+  import   : psycopg2 (PostgreSQL), os (clear layar), datetime (tanggal & jam sistem),
+             getpass / msvcrt (password tampil bintang)
+  try/except : hanya 2 tempat
+               - database.cek_koneksi()  -> pesan jelas jika PostgreSQL mati / password salah
+               - main.main()             -> error di tengah program (mis. database putus)
+                                            dan Ctrl+C tidak membuat program mati dengan
+                                            tulisan error panjang
+  raise    : 1 baris di tampilan.input_password (Ctrl+C saat mengetik password)
+
+  Kalau dosen belum mengizinkan try/except: hapus blok try/except di dua tempat itu.
+  Program tetap jalan, hanya error database akan tampil sebagai pesan error Python.
+
+
+============================================================
+ FITUR YANG DIPERTAHANKAN DARI VERSI LENGKAP (capesaikel)
+============================================================
+  Saat program mulai
+   - cek koneksi database + cek tabel/kolom yang dibutuhkan; kalau belum ada,
+     tampil pesan "Jalankan CafeCycle.sql" (bukan error panjang)
+   - Ctrl+C di mana pun -> "Program dihentikan." ; error tak terduga -> pesan
+     "Terjadi kesalahan: ..." lalu kembali ke menu awal
+
+  Tampilan
+   - header berlatar hijau, tanda [!] RENDAH berwarna merah
+   - password yang diketik tampil bintang (*) di login & buat akun (Windows);
+     di sistem lain memakai getpass (tidak tampil sama sekali)
+   - tanggal & jam memakai jam SISTEM, contoh: Rabu, 25 November 2026
+   - pilihan menu yang salah menampilkan pesan dan menahan layar (jeda)
+
+  Input tanggal (riwayat & laporan)
+   - satu isian "YYYY-MM-DD", ditolak jika formatnya salah atau tanggalnya tidak ada
+     (2026-02-30), tahun kabisat dihitung benar
+   - tidak boleh tanggal masa depan; tanggal akhir tidak boleh sebelum tanggal awal
+   - laporan: ketik 0 untuk batal; riwayat: dikosongkan = semua tanggal
+
+  Pemesanan
+   - sebelum bayar, keranjang DISINKRONKAN dengan harga & stok terbaru:
+     promo yang berakhir -> harga otomatis naik + pemberitahuan;
+     stok habis -> item dikeluarkan dari keranjang (pelanggan tidak perlu mengulang)
+   - teks pembayaran berbeda untuk kasir dan pelanggan
+   - checkout "semua atau tidak sama sekali": transaksi, item, dan stok disimpan
+     bersamaan (satu commit); gagal di tengah jalan -> rollback, tidak ada data setengah jadi
+   - harga dicek ulang tepat sebelum disimpan (promo bisa berakhir saat pelanggan membayar)
+
+  Anti-Waste Deals
+   - jam deal diketik "HH:MM" (contoh 21:30), harus lebih lambat dari jam sistem
+   - deal otomatis dinonaktifkan di database saat: jam habis, hari berganti,
+     stok menu 0, atau menu dihapus (bersihkan_deal di menu_data.py), termasuk saat
+     checkout dan saat stok diatur manual jadi 0
+   - menu yang harga normalnya diubah: deal yang tidak lagi lebih murah ikut nonaktif
+   - deal baru untuk menu yang sama menggantikan deal lama
+
+  Lain-lain
+   - daftar menu & stok dibagi MAKANAN / MINUMAN; kategori kosong tampil "(belum ada menu)",
+     kategori lain dari data lama tetap ikut tampil
+   - rekomendasi menu tidak membedakan huruf besar/kecil pada kategori
+   - riwayat, laporan, pesanan pelanggan: semua input divalidasi (tidak ada error
+     karena ID / tanggal yang salah)
+
+
+============================================================
+ YANG TETAP DISEDERHANAKAN (dibanding versi lengkap)
+============================================================
+  class Menu + namedtuple + @property -> satu menu = dictionary: menu["stok"]
+  menu_loop + lambda (fungsi sebagai argumen) -> tiap menu = while + match-case
+  with / contextmanager (transaksi())  -> koneksi dibuka & ditutup manual, commit/rollback
+                                          dipanggil sendiri di tutup() pada pemesanan.py
+  yield, generator expression, decorator -> tidak dipakai
+
+  Akibatnya: jika terjadi error tak terduga, pengguna kembali ke MENU AWAL
+  (versi lengkap kembali ke menu terakhir). Data tetap aman karena perubahan
+  yang belum di-commit dibatalkan.
+
+
+============================================================
+ PETA ALUR (mulai dari main.py)
+============================================================
+main()  -> cek_koneksi() + cek_skema()      gagal -> program berhenti dengan pesan
+ |- menu_awal()  (while + match-case)
+ |   |- 1. Pelanggan  -> pemesanan.pesan(False)
+ |   |- 2. Pengelola  -> login.login()
+ |   |      |- "admin"    -> menu_utama.menu_admin()
+ |   |      |- "karyawan" -> menu_utama.menu_karyawan()
+ |   |- 0. Keluar
+ |- error / Ctrl+C ditangkap di main()
+
+Semua menu bentuknya sama:
+
+    while True:
+        header("Judul")
+        print("1. ...")
+        print("0. Kembali")
+        pilihan = input("Pilihan: ")
+        match pilihan:
+            case "1":
+                fungsi_satu()
+            case "0":
+                break
+            case _:
+                print("Pilihan tidak valid.")
+
+Menambah fitur: tulis fungsinya, tambah satu print() dan satu case.
+
+Alur pesan(): minta_nama -> pilih_menu_ke_keranjang (ulang sampai ID 0)
+  -> sinkronkan_keranjang -> rincian + total -> minta_pembayaran (0 = batal)
+  -> checkout -> cetak_struk
+
+
+============================================================
+ AKSES DATABASE (database.py)
+============================================================
+  ambil(sql, data)           SELECT                  -> list berisi tuple
+  jalankan(sql, data)        1 INSERT/UPDATE/DELETE  -> otomatis commit
+  jalankan_banyak([...])     beberapa perintah, 1x commit
+  cek_koneksi(), cek_skema() dipanggil sekali saat program mulai
+
+Contoh membaca hasil:
+    for id_menu, nama, harga in ambil("SELECT id, nama, harga FROM menu"):
+        print(id_menu, nama, harga)
+
+%s di SQL = tempat nilai dari tuple data. Jangan gabungkan input pengguna
+langsung ke teks SQL (berbahaya); selalu pakai %s.
+
+checkout() memakai koneksi + cursor sendiri karena satu pesanan mengubah 3 tabel
+dan id transaksi dipakai lagi di langkah berikutnya:
+    bersihkan deal -> cek harga & uang bayar -> hitung antrean
+    -> INSERT transaksi (ambil id) -> per item: kurangi stok + INSERT item
+    -> bersihkan deal -> commit()
+Jika ada langkah yang gagal: rollback() = semua dibatalkan (lihat tutup()).
+
+
+============================================================
+ BENTUK DATA
+============================================================
+Menu (dari ambil_menu / cari_menu) = dictionary:
+   {"id", "nama", "kategori", "harga", "stok", "harga_jual", "batas"}
+   harga_jual = harga deal kalau deal berlaku, kalau tidak sama dengan harga.
+   batas      = jam berakhir deal, None kalau tidak ada deal.
+
+Keranjang (pemesanan.py) = dictionary berisi dictionary:
+   {1: {"nama": "Kopi Susu", "jumlah": 2, "harga": 18000},
+    3: {"nama": "Roti Bakar", "jumlah": 1, "harga": 8000}}
+
+Tanggal = objek date (hasil input_tanggal), jam = objek time (hasil baca_jam).
+
+
+============================================================
+ ATURAN ANTI-WASTE
+============================================================
+Deal otomatis hilang jika: jam sistem melewati batas waktu, hari berganti,
+stok menu 0, atau menu dihapus. Pembersihan dilakukan oleh bersihkan_deal()
+setiap kali daftar menu diambil, saat checkout, dan saat stok diatur manual.
+Harga yang dipakai = harga deal yang masih berlaku, kalau tidak harga normal.
+
+
+============================================================
+ DAFTAR FILE
+============================================================
+  main.py              pintu masuk, menu awal, penangkap error
+  menu_utama.py        menu karyawan & menu admin
+  tampilan.py          layar, warna, format rupiah/tanggal, input angka/tanggal/password
+  database.py          sambung, ambil, jalankan, jalankan_banyak, cek koneksi & skema
+  login.py             login (maks 3 percobaan, password bintang)
+  pemesanan.py         keranjang, sinkronisasi, pembayaran, checkout, struk
+  pesanan_pelanggan.py tandai pesanan 'diproses' -> 'selesai'
+  menu_data.py         ambil/cari/tampil menu, bersihkan_deal
+  kelola_menu.py       tambah / ubah / hapus(sembunyikan) menu
+  kelola_stok.py       tambah / atur porsi, batas minimum
+  anti_waste.py        buat & nonaktifkan deal
+  rekomendasi.py       saran menu sesuai kategori & anggaran
+  riwayat.py           riwayat transaksi + filter tanggal
+  laporan.py           laporan penjualan per periode
+  pengguna.py          kelola akun karyawan (admin)
+  CafeCycle.sql        skema + data dummy
